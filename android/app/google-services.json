@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "216110277304",
+    "project_id": "wastemgt-28654",
+    "storage_bucket": "wastemgt-28654.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:216110277304:android:ca31441bba14df072c0a4d",
+        "android_client_info": {
+          "package_name": "com.example.waste"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "216110277304-883r73h5qelvkmf5ljk45mkj98qnu8a8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCOHpxnhTmBxyXCramgmlO-XO6ZUv24EHs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "216110277304-883r73h5qelvkmf5ljk45mkj98qnu8a8.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,69 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Visual Studio Code related
+.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Android-related
+**/android/**/build/
+**/android/**/local.properties
+**/android/**/GeneratedPluginRegistrant.java
+
+# iOS-related
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/Flutter/App.framework
+**/ios/Flutter/App.podspec
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Runner/GeneratedPluginRegistrant.[mh]
+**/*.moved-aside
+
+# Windows-related
+**/windows/flutter/generated_*.cmake
+**/windows/flutter/generated_*.cpp
+**/windows/flutter/generated_*.h
+**/windows/flutter/generated_*.props
+**/windows/flutter/generated_*.targets
+**/windows/out/
+
+# Linux-related
+**/linux/flutter/generated_*.cmake
+**/linux/flutter/generated_*.h
+**/linux/out/
+
+# Environment variables
+.env
+.env*
+! .env.example
