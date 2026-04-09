@@ -32,19 +32,21 @@ class AIService {
     );
   }
 
-  Future<Map<String, dynamic>> analyzeWaste(Uint8List imageBytes) async {
+  Future<List<Map<String, dynamic>>> analyzeWaste(Uint8List imageBytes) async {
     if (!_isInitialized) _initialize();
     if (_apiKey == null) throw Exception('AI Service (Groq) not initialized');
 
     try {
-      return await _performAnalysis(imageBytes, _visionModel);
+      final data = await _performAnalysis(imageBytes, _visionModel);
+      return List<Map<String, dynamic>>.from(data['items'] ?? [data]);
     } catch (e) {
       debugPrint('Primary model failed, trying stable fallback: $e');
       try {
-        return await _performAnalysis(
+        final data = await _performAnalysis(
           imageBytes,
           'llama-3.2-11b-vision-preview',
         );
+        return List<Map<String, dynamic>>.from(data['items'] ?? [data]);
       } catch (e2) {
         debugPrint('Stable fallback also failed: $e2');
         rethrow;
@@ -59,22 +61,27 @@ class AIService {
     final base64Image = base64Encode(imageBytes);
 
     final prompt = """
-      Identify the waste item in this image and analyze it for segregation.
+      Identify ALL waste items visible in this image and analyze each for segregation.
       Return ONLY a valid JSON object.
       
       JSON structure:
       {
-        "type": "Specific Waste Type",
-        "description": "Short summary (e.g., Plastic Bottle)",
-        "detailed_analysis": "Provide a 1-2 sentence detailed description of the waste item, its material, and condition.",
-        "tag": "Category (Recyclable, Organic, Hazardous, E-Waste, or Non-Recyclable)",
-        "confidence": Integer (0-100),
-        "disposal_instructions": ["Step-by-step instructions"],
-        "recycling_options": ["Where/how to recycle"],
-        "pro_tips": ["Environmental strategies"]
+        "items": [
+          {
+            "type": "Specific Waste Type",
+            "description": "Short summary (e.g., Plastic Bottle)",
+            "detailed_analysis": "Provide a 1-2 sentence detailed description of the waste item, its material, and condition.",
+            "tag": "Category (Recyclable, Organic, Hazardous, E-Waste, or Non-Recyclable)",
+            "is_biodegradable": true/false,
+            "confidence": Integer (0-100),
+            "disposal_instructions": ["Step-by-step instructions"],
+            "recycling_options": ["Where/how to recycle"],
+            "pro_tips": ["Environmental strategies"]
+          }
+        ]
       }
       
-      Be extremely accurate. Use your deep knowledge of waste management and environmental standards.
+      Detect as many items as clearly visible. Be extremely accurate. Use your deep knowledge of waste management and environmental standards.
     """;
 
     final response = await http.post(

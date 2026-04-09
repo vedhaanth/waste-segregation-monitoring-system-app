@@ -4,6 +4,7 @@ class WasteResult {
   final String detailedAnalysis;
   final String tag;
   final int confidence;
+  final bool isBiodegradable;
   final List<String> disposalInstructions;
   final List<String> recyclingOptions;
   final List<String> proTips;
@@ -14,6 +15,7 @@ class WasteResult {
     required this.detailedAnalysis,
     required this.tag,
     required this.confidence,
+    required this.isBiodegradable,
     required this.disposalInstructions,
     required this.recyclingOptions,
     required this.proTips,
@@ -31,6 +33,7 @@ class WasteResult {
       detailedAnalysis: itemObj['detailedAnalysis'] ?? data['detailedAnalysis'] ?? '',
       tag: classification['tag'] ?? data['tag'] ?? 'waste',
       confidence: _parseInt(classification['confidence'] ?? data['confidence']),
+      isBiodegradable: classification['isBiodegradable'] ?? data['is_biodegradable'] ?? data['isBiodegradable'] ?? false,
       disposalInstructions: List<String>.from(
         guidance['disposalInstructions'] ?? data['disposalInstructions'] ?? data['dis_instructions'] ?? [],
       ),

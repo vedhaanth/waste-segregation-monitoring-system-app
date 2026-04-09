@@ -22,7 +22,7 @@ class _ScanPageState extends State<ScanPage> {
   final ImagePicker _picker = ImagePicker();
   dynamic _image; // File for mobile, Uint8List for web
   bool _isAnalyzing = false;
-  WasteResult? _analysisResult;
+  List<WasteResult> _analysisResults = [];
 
   @override
   void initState() {
@@ -69,7 +69,7 @@ class _ScanPageState extends State<ScanPage> {
           } else {
             _image = File(photo.path);
           }
-          _analysisResult = null; // Reset previous result
+          _analysisResults = []; // Reset previous result
         });
       }
     } catch (e) {
@@ -84,7 +84,7 @@ class _ScanPageState extends State<ScanPage> {
   void _removeImage() {
     setState(() {
       _image = null;
-      _analysisResult = null;
+      _analysisResults = [];
     });
   }
 
@@ -103,27 +103,30 @@ class _ScanPageState extends State<ScanPage> {
           ? _image as Uint8List
           : await (_image as File).readAsBytes();
 
-      final data = await AIService().analyzeWaste(imageBytes);
+      final itemsData = await AIService().analyzeWaste(imageBytes);
 
       setState(() {
-        _analysisResult = WasteResult(
+        _analysisResults = itemsData.map((data) => WasteResult(
           type: data['type'] ?? 'Unknown',
           description: data['description'] ?? 'No description available',
           detailedAnalysis:
               data['detailed_analysis'] ?? 'AI identification in progress...',
           tag: data['tag'] ?? 'waste',
+          isBiodegradable: data['is_biodegradable'] ?? false,
           confidence: data['confidence'] ?? 0,
           disposalInstructions: List<String>.from(
             data['disposal_instructions'] ?? [],
           ),
           recyclingOptions: List<String>.from(data['recycling_options'] ?? []),
           proTips: List<String>.from(data['pro_tips'] ?? []),
-        );
+        )).toList();
       });
 
       // Save to database
-      if (_analysisResult != null) {
-        _saveScanResult(_analysisResult!);
+      if (_analysisResults.isNotEmpty) {
+        for (var result in _analysisResults) {
+          _saveScanResult(result);
+        }
       }
     } catch (e) {
       debugPrint("AI Error: $e. Using Fallback Mock.");
@@ -161,23 +164,28 @@ class _ScanPageState extends State<ScanPage> {
     // Randomize slightly for variety if needed, but here's a standard fallback
     return """
 {
-  "type": "General Waste",
-  "description": "Unidentified household waste item",
-  "detailed_analysis": "The analysis indicates this is a general waste item that should be disposed of carefully.",
-  "tag": "waste",
-  "confidence": 85,
-  "disposal_instructions": [
-    "Check local guidelines if unsure",
-    "Separate if recyclable material is visible",
-    "Dispose in general waste bin if non-recyclable"
-  ],
-  "recycling_options": [
-    "Community recycling center",
-    "Curbside pickup"
-  ],
-  "pro_tips": [
-    "Rinse containers before recycling",
-    "Reduce waste by choosing reusable alternatives"
+  "items": [
+    {
+      "type": "General Waste",
+      "description": "Unidentified household waste item",
+      "detailed_analysis": "The analysis indicates this is a general waste item that should be disposed of carefully.",
+      "tag": "waste",
+      "is_biodegradable": false,
+      "confidence": 85,
+      "disposal_instructions": [
+        "Check local guidelines if unsure",
+        "Separate if recyclable material is visible",
+        "Dispose in general waste bin if non-recyclable"
+      ],
+      "recycling_options": [
+        "Community recycling center",
+        "Curbside pickup"
+      ],
+      "pro_tips": [
+        "Rinse containers before recycling",
+        "Reduce waste by choosing reusable alternatives"
+      ]
+    }
   ]
 }
 """;
@@ -195,25 +203,29 @@ class _ScanPageState extends State<ScanPage> {
 
       String jsonString = match.group(0)!;
       final data = jsonDecode(jsonString);
+      final items = (data['items'] as List?) ?? (data is List ? data : [data]);
 
       setState(() {
-        _analysisResult = WasteResult(
-          type: data['type'] ?? 'Unknown',
-          description: data['description'] ?? 'No description available',
+        _analysisResults = items.map((item) => WasteResult(
+          type: item['type'] ?? 'Unknown',
+          description: item['description'] ?? 'No description available',
           detailedAnalysis:
-              data['detailed_analysis'] ?? 'AI identification in progress...',
-          tag: data['tag'] ?? 'waste',
-          confidence: data['confidence'] ?? 0,
+              item['detailed_analysis'] ?? 'AI identification in progress...',
+          tag: item['tag'] ?? 'waste',
+          isBiodegradable: item['is_biodegradable'] ?? false,
+          confidence: item['confidence'] ?? 0,
           disposalInstructions: List<String>.from(
-            data['disposal_instructions'] ?? [],
+            item['disposal_instructions'] ?? [],
           ),
-          recyclingOptions: List<String>.from(data['recycling_options'] ?? []),
-          proTips: List<String>.from(data['pro_tips'] ?? []),
-        );
+          recyclingOptions: List<String>.from(item['recycling_options'] ?? []),
+          proTips: List<String>.from(item['pro_tips'] ?? []),
+        )).toList();
       });
 
       // Save to database
-      _saveScanResult(_analysisResult!);
+      for (var result in _analysisResults) {
+        _saveScanResult(result);
+      }
     } catch (e) {
       debugPrint("JSON Parse Error: $e");
       if (mounted) {
@@ -241,6 +253,7 @@ class _ScanPageState extends State<ScanPage> {
         'description': result.description,
         'detailedAnalysis': result.detailedAnalysis,
         'tag': result.tag,
+        'isBiodegradable': result.isBiodegradable,
         'confidence': result.confidence,
         'disposalInstructions': result.disposalInstructions,
         'recyclingOptions': result.recyclingOptions,
@@ -262,65 +275,195 @@ class _ScanPageState extends State<ScanPage> {
   }
 
   Widget _buildResultView() {
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          Card(
-            elevation: 4,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+    return Column(
+      children: [
+        if (_analysisResults.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12.0),
+            child: Row(
+              children: [
+                const Icon(Icons.layers_outlined, size: 20, color: Colors.green),
+                const SizedBox(width: 8),
+                Text(
+                  "${_analysisResults.length} Items Identified",
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: Colors.green,
+                  ),
+                ),
+              ],
             ),
-            color: Colors.white,
-            child: Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 60,
-                        height: 60,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey[300]!),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Center(
-                          child: Icon(
-                            _getIconForType(_analysisResult!.type),
-                            size: 32,
-                            color: Colors.black87,
+          ),
+        Expanded(
+          child: ListView.builder(
+            itemCount: _analysisResults.length + (_analysisResults.length > 1 ? 2 : 1),
+            itemBuilder: (context, index) {
+              if (index < _analysisResults.length) {
+                final result = _analysisResults[index];
+                return _buildResultCard(result, index);
+              }
+
+              // Report All Button (Only shown if multiple items)
+              if (_analysisResults.length > 1 && index == _analysisResults.length) {
+                return Padding(
+                  padding: const EdgeInsets.only(top: 16.0),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 56,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        final allItemsDesc = _analysisResults.map((e) => "- ${e.type}: ${e.description}").join("\n");
+                        final fullDesc = "Multiple items detected:\n$allItemsDesc\n\nCollective Analysis:\n${_analysisResults.map((e) => e.detailedAnalysis).join(' ')}";
+                        
+                        // Select primary issue type (first non-'Other')
+                        String collectiveType = 'Garbage Heaps';
+                        for (var res in _analysisResults) {
+                          final t = _getIssueType(res.type);
+                          if (t != 'Other') {
+                            collectiveType = t;
+                            break;
+                          }
+                        }
+
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ReportIssuePage(
+                              initialType: collectiveType,
+                              initialDescription: fullDesc,
+                              initialImage: _image is File ? _image as File : null,
+                            ),
                           ),
+                        );
+                      },
+                      icon: const Icon(Icons.report_gmailerrorred_rounded),
+                      label: const Text('Report All Items as Single Issue'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red[50],
+                        foregroundColor: Colors.red[900],
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          side: BorderSide(color: Colors.red[200]!),
                         ),
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _analysisResult!.type,
-                              style: const TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              _analysisResult!.description,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                color: Colors.black54,
-                              ),
-                            ),
-                          ],
+                    ),
+                  ),
+                );
+              }
+
+              // Refresh Button
+              return Padding(
+                padding: const EdgeInsets.only(top: 8.0, bottom: 32.0),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton.icon(
+                    onPressed: _removeImage,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Scan Another Item'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.grey[100],
+                      foregroundColor: Colors.black87,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(color: Colors.grey[300]!),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildResultCard(WasteResult result, int index) {
+    return Card(
+      elevation: 4,
+      margin: const EdgeInsets.only(bottom: 20),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey[300]!),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Center(
+                    child: Icon(
+                      _getIconForType(result.type),
+                      size: 32,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        result.type,
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        result.description,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.black54,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                ),
+                if (_analysisResults.length > 1)
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      "#${index + 1}",
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 4,
+              ),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
@@ -331,7 +474,7 @@ class _ScanPageState extends State<ScanPage> {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      _analysisResult!.tag.toLowerCase(),
+                      result.tag.toLowerCase(),
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -339,192 +482,201 @@ class _ScanPageState extends State<ScanPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    "AI: Analysis complete. Verify contents before disposal.",
-                    style: TextStyle(
-                      fontStyle: FontStyle.italic,
-                      color: Colors.black87,
-                      fontSize: 13,
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Stack(
-                    children: [
-                      Container(
-                        height: 8,
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          color: Colors.grey[200],
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                      FractionallySizedBox(
-                        widthFactor: (_analysisResult!.confidence / 100),
-                        child: Container(
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.secondary,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 4.0),
-                      child: Text(
-                        "${_analysisResult!.confidence}% match",
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
+                    decoration: BoxDecoration(
+                      color: result.isBiodegradable 
+                          ? Colors.green[100] 
+                          : Colors.red[100],
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: result.isBiodegradable 
+                            ? Colors.green[300]! 
+                            : Colors.red[300]!,
                       ),
                     ),
-                  ),
-                  const Divider(height: 32),
-                  if (_analysisResult!.detailedAnalysis.isNotEmpty) ...[
-                    const Text(
-                      "Detailed Analysis",
+                    child: Text(
+                      result.isBiodegradable ? "Biodegradable" : "Non-Biodegradable",
                       style: TextStyle(
-                        fontSize: 14,
+                        color: result.isBiodegradable 
+                            ? Colors.green[800] 
+                            : Colors.red[800],
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF00695C),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _analysisResult!.detailedAnalysis,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Colors.black87,
-                        height: 1.4,
-                      ),
-                    ),
-                    const Divider(height: 32),
-                  ],
-
-                  // Disposal Instructions (Pre-expanded styled look)
-                  _buildSectionHeader(
-                    Icons.check_circle_outline,
-                    "Disposal Instructions",
-                    isPrimary: true,
-                  ),
-                  ..._analysisResult!.disposalInstructions.map(
-                    (instruction) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4.0),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Icon(
-                            Icons.arrow_right_alt,
-                            color: Color(0xFF0F9D58),
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              instruction,
-                              style: TextStyle(color: Colors.grey[800]),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  _buildExpansionTile(
-                    Icons.recycling,
-                    "Recycling Options",
-                    _analysisResult!.recyclingOptions,
-                  ),
-                  _buildExpansionTile(
-                    Icons.info_outline,
-                    "Pro Tips",
-                    _analysisResult!.proTips,
-                  ),
-
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Locating nearby centers...'),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.location_on_outlined),
-                      label: const Text('Find Nearby Bins & Centers'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.black87,
-                        side: BorderSide(color: Colors.grey[300]!),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ReportIssuePage(
-                              initialType:
-                                  _analysisResult!.type.contains('Plastic')
-                                  ? 'Garbage Heaps'
-                                  : 'Other',
-                            ),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.report_problem_outlined),
-                      label: const Text('Report This as an Issue'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orange[100],
-                        foregroundColor: Colors.orange[900],
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: BorderSide(color: Colors.orange[300]!),
-                        ),
+                        fontSize: 12,
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton.icon(
-              onPressed: _removeImage,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Scan Another Item'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.grey[100],
-                foregroundColor: Colors.black87,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: Colors.grey[300]!),
+            const SizedBox(height: 12),
+            const Text(
+              "AI: Analysis complete. Verify contents before disposal.",
+              style: TextStyle(
+                fontStyle: FontStyle.italic,
+                color: Colors.black87,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Stack(
+              children: [
+                Container(
+                  height: 8,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                FractionallySizedBox(
+                  widthFactor: (result.confidence / 100).clamp(0.0, 1.0),
+                  child: Container(
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.secondary,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 4.0),
+                child: Text(
+                  "${result.confidence}% match",
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 32),
-        ],
+            const Divider(height: 32),
+            if (result.detailedAnalysis.isNotEmpty) ...[
+              const Text(
+                "Detailed Analysis",
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF00695C),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                result.detailedAnalysis,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Colors.black87,
+                  height: 1.4,
+                ),
+              ),
+              const Divider(height: 32),
+            ],
+
+            // Disposal Instructions
+            _buildSectionHeader(
+              Icons.check_circle_outline,
+              "Disposal Instructions",
+              isPrimary: true,
+            ),
+            ...result.disposalInstructions.map(
+              (instruction) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4.0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.arrow_right_alt,
+                      color: Color(0xFF0F9D58),
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        instruction,
+                        style: TextStyle(color: Colors.grey[800]),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            _buildExpansionTile(
+              Icons.recycling,
+              "Recycling Options",
+              result.recyclingOptions,
+            ),
+            _buildExpansionTile(
+              Icons.info_outline,
+              "Pro Tips",
+              result.proTips,
+            ),
+
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Locating nearby centers...'),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.location_on_outlined),
+                label: const Text('Find Nearby Bins & Centers'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.black87,
+                  side: BorderSide(color: Colors.grey[300]!),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+            if (_analysisResults.length == 1) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    final autoDescription = "Identified as ${result.type}. ${result.description}. ${result.detailedAnalysis}";
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ReportIssuePage(
+                          initialType: _getIssueType(result.type),
+                          initialDescription: autoDescription,
+                          initialImage: _image is File ? _image as File : null,
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.report_problem_outlined),
+                  label: const Text('Report This as an Issue'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange[100],
+                    foregroundColor: Colors.orange[900],
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: Colors.orange[300]!),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -626,6 +778,24 @@ class _ScanPageState extends State<ScanPage> {
     return Icons.delete_outline;
   }
 
+  String _getIssueType(String type) {
+    final t = type.toLowerCase();
+    if (t.contains('electronic') || t.contains('phone') || t.contains('battery')) {
+      return 'E-Waste dumping';
+    } else if (t.contains('construction') || t.contains('brick') || t.contains('stone')) {
+      return 'Construction Waste';
+    } else if (t.contains('drain') || t.contains('sewer') || t.contains('blockage')) {
+      return 'Blocked Drains';
+    } else if (t.contains('animal') || t.contains('carcass')) {
+      return 'Dead Animals';
+    } else if (t.contains('burn') || t.contains('fire') || t.contains('smoke')) {
+      return 'Open Burning';
+    } else if (t.contains('plastic') || t.contains('garbage') || t.contains('waste')) {
+      return 'Garbage Heaps';
+    }
+    return 'Other';
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -657,7 +827,7 @@ class _ScanPageState extends State<ScanPage> {
               ),
               const SizedBox(height: 24),
 
-              if (_analysisResult != null) ...[
+              if (_analysisResults.isNotEmpty) ...[
                 Expanded(child: _buildResultView()),
               ] else ...[
                 Expanded(

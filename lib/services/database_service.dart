@@ -157,6 +157,7 @@ class DatabaseService {
       'classification': {
         'tag': scanData['tag'],
         'confidence': scanData['confidence'],
+        'isBiodegradable': scanData['isBiodegradable'],
       },
       'guidance': {
         'disposalInstructions': scanData['disposalInstructions'],

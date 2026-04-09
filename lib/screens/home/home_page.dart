@@ -92,17 +92,18 @@ class _HomePageState extends State<HomePage> {
         wasteTypeDescription = "$manualType (User Identified)";
       }
 
-      // 5. Prepare Message and Share
       final String googleMapsUrl =
           'https://www.google.com/maps/search/?api=1&query=${position.latitude},${position.longitude}';
 
-      final String message =
-          'Hello, I would like to report waste accumulation.\n\nType: $wasteTypeDescription\nLocation: $googleMapsUrl';
-
-      await Share.share(
-        message,
-        subject: 'Waste Report: $wasteTypeDescription',
-      );
+      // 6. Save to Database for Admin Dashboard
+      await DatabaseService().submitReport({
+        'type': wasteTypeDescription,
+        'description': 'Waste reported from Quick Actions near ${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}',
+        'location_url': googleMapsUrl,
+        'imagePath': photo.path,
+        'latitude': position.latitude,
+        'longitude': position.longitude,
+      });
 
       if (mounted) {
         showDialog(
@@ -112,11 +113,11 @@ class _HomePageState extends State<HomePage> {
               children: [
                 Icon(Icons.check_circle, color: Colors.green),
                 SizedBox(width: 8),
-                Text('Report Initiated'),
+                Text('Report Submitted'),
               ],
             ),
             content: Text(
-              'Thank you for reporting the $wasteTypeDescription!\n\nYour contribution helps keep our environment clean.',
+              'Thank you for reporting the $wasteTypeDescription!\n\nYour contribution has been recorded and reported to the authorities.',
             ),
             actions: [
               TextButton(

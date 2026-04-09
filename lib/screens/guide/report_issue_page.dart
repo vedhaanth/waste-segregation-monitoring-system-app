@@ -8,7 +8,15 @@ import 'package:url_launcher/url_launcher.dart';
 
 class ReportIssuePage extends StatefulWidget {
   final String initialType;
-  const ReportIssuePage({super.key, this.initialType = 'Garbage Heaps'});
+  final String? initialDescription;
+  final File? initialImage;
+
+  const ReportIssuePage({
+    super.key, 
+    this.initialType = 'Garbage Heaps',
+    this.initialDescription,
+    this.initialImage,
+  });
 
   @override
   State<ReportIssuePage> createState() => _ReportIssuePageState();
@@ -36,6 +44,10 @@ class _ReportIssuePageState extends State<ReportIssuePage> {
   void initState() {
     super.initState();
     _selectedType = widget.initialType;
+    if (widget.initialDescription != null) {
+      _descriptionController.text = widget.initialDescription!;
+    }
+    _image = widget.initialImage;
     _getCurrentLocation();
   }
 
@@ -143,18 +155,6 @@ Sent from BinBrain Smart Waste App
                 Navigator.pop(context); // Go back to previous screen
               },
               child: const Text('DONE'),
-            ),
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.pop(context);
-                _showShareOptions(reportMessage);
-              },
-              icon: const Icon(Icons.share),
-              label: const Text('SHARE ALSO'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Theme.of(context).primaryColor,
-                foregroundColor: Colors.white,
-              ),
             ),
           ],
         ),
